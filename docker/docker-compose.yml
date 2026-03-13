@@ -37,6 +37,7 @@ services:
   airflow-init:
     image: apache/airflow:2.9.3
     container_name: airflow_init
+    hostname: airflow-init
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,11 +50,13 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:1234@postgres:5432/airflow_db
       DATABASE_URL: postgresql://postgres:1234@postgres:5432/crypto_db
       PYTHONPATH: /opt/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: kfdsjkhj4328947skjedlfjio3r0r3ulfsdk
     volumes:
       - ../dags:/opt/airflow/dags
       - ../pipeline:/opt/airflow/pipeline
       - ../data_lake:/opt/airflow/data_lake
       - ../warehouse:/opt/airflow/warehouse
+      - ../logs:/opt/airflow/logs
     command: >
       bash -c "
       airflow db migrate &&
@@ -69,6 +72,7 @@ services:
   airflow-webserver:
     image: apache/airflow:2.9.3
     container_name: airflow_webserver
+    hostname: airflow-webserver
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,11 +96,13 @@ services:
       - ../pipeline:/opt/airflow/pipeline
       - ../data_lake:/opt/airflow/data_lake
       - ../warehouse:/opt/airflow/warehouse
+      - ../logs:/opt/airflow/logs
     command: webserver
 
   airflow-scheduler:
     image: apache/airflow:2.9.3
     container_name: airflow_scheduler
+    hostname: airflow-scheduler
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,11 +117,13 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:1234@postgres:5432/airflow_db
       DATABASE_URL: postgresql://postgres:1234@postgres:5432/crypto_db
       PYTHONPATH: /opt/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: kfdsjkhj4328947skjedlfjio3r0r3ulfsdk
     volumes:
       - ../dags:/opt/airflow/dags
       - ../pipeline:/opt/airflow/pipeline
       - ../data_lake:/opt/airflow/data_lake
       - ../warehouse:/opt/airflow/warehouse
+      - ../logs:/opt/airflow/logs
     command: scheduler
 
 volumes:
