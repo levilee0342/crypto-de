@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:15
     container_name: crypto_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 1234
@@ -38,6 +39,7 @@ services:
     image: apache/airflow:2.9.3
     container_name: airflow_init
     hostname: airflow-init
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,6 +75,7 @@ services:
     image: apache/airflow:2.9.3
     container_name: airflow_webserver
     hostname: airflow-webserver
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,6 +106,7 @@ services:
     image: apache/airflow:2.9.3
     container_name: airflow_scheduler
     hostname: airflow-scheduler
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
