@@ -83,6 +83,8 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:1234@postgres:5432/airflow_db
       DATABASE_URL: postgresql://postgres:1234@postgres:5432/crypto_db
       PYTHONPATH: /opt/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: kfdsjkhj4328947skjedlfjio3r0r3ulfsdk
+
     ports:
       - "8080:8080"
     volumes:
