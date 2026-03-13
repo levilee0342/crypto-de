@@ -1,0 +1,120 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: crypto_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../warehouse/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-init:
+    image: postgres:15
+    container_name: postgres_init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: 1234
+    command: >
+      bash -c "
+      psql -h postgres -U postgres -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'airflow_db'\" | grep -q 1 || psql -h postgres -U postgres -d postgres -c 'CREATE DATABASE airflow_db';
+      psql -h postgres -U postgres -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'crypto_db'\" | grep -q 1 || psql -h postgres -U postgres -d postgres -c 'CREATE DATABASE crypto_db';
+      "
+    restart: "no"
+
+  airflow-init:
+    image: apache/airflow:2.9.3
+    container_name: airflow_init
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:1234@postgres:5432/airflow_db
+      DATABASE_URL: postgresql://postgres:1234@postgres:5432/crypto_db
+      PYTHONPATH: /opt/airflow
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../pipeline:/opt/airflow/pipeline
+      - ../data_lake:/opt/airflow/data_lake
+      - ../warehouse:/opt/airflow/warehouse
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create
+      --username admin
+      --password admin
+      --firstname admin
+      --lastname admin
+      --role Admin
+      --email admin@example.com
+      "
+
+  airflow-webserver:
+    image: apache/airflow:2.9.3
+    container_name: airflow_webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:1234@postgres:5432/airflow_db
+      DATABASE_URL: postgresql://postgres:1234@postgres:5432/crypto_db
+      PYTHONPATH: /opt/airflow
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../pipeline:/opt/airflow/pipeline
+      - ../data_lake:/opt/airflow/data_lake
+      - ../warehouse:/opt/airflow/warehouse
+    command: webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.3
+    container_name: airflow_scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:1234@postgres:5432/airflow_db
+      DATABASE_URL: postgresql://postgres:1234@postgres:5432/crypto_db
+      PYTHONPATH: /opt/airflow
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../pipeline:/opt/airflow/pipeline
+      - ../data_lake:/opt/airflow/data_lake
+      - ../warehouse:/opt/airflow/warehouse
+    command: scheduler
+
+volumes:
+  postgres_data:
