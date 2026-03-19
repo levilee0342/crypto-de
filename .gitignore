@@ -1,5 +1,6 @@
+logs/
+data_lake/
 .venv/
 __pycache__/
 *.pyc
-data_lake/
 .idea/

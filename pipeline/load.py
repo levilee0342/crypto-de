@@ -12,14 +12,12 @@ DB_URL = os.getenv(
 engine = create_engine(DB_URL)
 
 
-def load():
-    processed_base = Path("data_lake/processed")
-    processed_file = sorted(processed_base.glob("dt=*/crypto_clean.parquet"))
-    if not processed_file:
-        raise FileNotFoundError("No processed file found")
+def load(run_date: str):
+    processed_file = Path(f"data_lake/processed/dt={run_date}/crypto_clean.parquet")
+    if not processed_file.exists():
+        raise FileNotFoundError(f"Processed file not found for run_date={run_date}")
 
-    last_processed = processed_file[-1]
-    df = pd.read_parquet(last_processed)
+    df = pd.read_parquet(processed_file)
   
     dim_df = df[["coin_id","symbol"]].drop_duplicates().reset_index(drop=True)
     fact_df = df.drop(columns=["symbol"]).drop_duplicates(subset=["coin_id", "timestamp"]).reset_index(drop=True)
@@ -37,6 +35,7 @@ def load():
                 volume DOUBLE PRECISION,
                 market_cap DOUBLE PRECISION,
                 timestamp TIMESTAMP NOT NULL,
+                snapshot_date DATE NOT NULL,
                 PRIMARY KEY (coin_id, timestamp),
                 CONSTRAINT fk_fact_price_coin
                     FOREIGN KEY (coin_id) REFERENCES dim_coin (coin_id)
@@ -55,8 +54,8 @@ def load():
 
         for row in fact_df.itertuples(index=False):
             conn.execute(text("""
-                INSERT INTO fact_price (coin_id, price, volume, market_cap, timestamp)
-                VALUES (:coin_id, :price, :volume, :market_cap, :timestamp)
+                INSERT INTO fact_price (coin_id, price, volume, market_cap, timestamp, snapshot_date)
+                VALUES (:coin_id, :price, :volume, :market_cap, :timestamp, :snapshot_date)
                 ON CONFLICT (coin_id, timestamp) 
                 DO NOTHING
             """), 
@@ -65,8 +64,9 @@ def load():
                 "price": row.price,
                 "volume": row.volume,
                 "market_cap": row.market_cap,
-                "timestamp": row.timestamp
+                "timestamp": row.timestamp,
+                "snapshot_date": row.snapshot_date
             })
 
 if __name__ == "__main__":
-    load()
+    load("2026-03-17")

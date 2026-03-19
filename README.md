@@ -1,6 +1,6 @@
 # Crypto Data Engineering Pipeline
 
-An end-to-end batch data engineering project that ingests cryptocurrency market data from the CoinGecko API, stores raw and processed datasets in Parquet, loads a Postgres warehouse, and builds daily analytics tables with Apache Airflow orchestration.
+An end-to-end batch data engineering project that ingests cryptocurrency market data from the CoinGecko API, stores raw and processed datasets in Parquet, loads a Postgres warehouse, runs partition-level quality checks, and builds daily analytics tables with Apache Airflow orchestration.
 
 ## What this project demonstrates
 
@@ -8,8 +8,11 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
 - Raw and processed data lake layers in Parquet
 - Batch ETL orchestration with Apache Airflow
 - Dimensional warehouse loading into Postgres
+- Partition-aware pipeline runs with `run_date`
+- Snapshot-based warehousing with `snapshot_date`
+- Post-load warehouse quality checks
 - Idempotent fact loading with conflict handling
-- Daily aggregate analytics for downstream reporting
+- Incremental daily aggregate analytics for downstream reporting
 - Local development with Docker Compose
 
 ## Architecture
@@ -51,6 +54,18 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
           | - volume                         |
           | - market_cap                     |
           | - timestamp                      |
+          | - snapshot_date                  |
+          +----------------+-----------------+
+                           |
+                           | Quality check
+                           v
+          +----------------------------------+
+          | Data Quality Layer               |
+          |                                  |
+          | - row count check                |
+          | - null check                     |
+          | - duplicate check                |
+          | - orphan FK check                |
           +----------------+-----------------+
                            |
                            | Build analytics
@@ -88,7 +103,12 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
 
 ### 1. Extract
 
-`pipeline/extract.py` calls the CoinGecko `/coins/markets` endpoint, adds a UTC ingestion timestamp, and writes raw API output to:
+`pipeline/extract.py` calls the CoinGecko `/coins/markets` endpoint, adds:
+
+- `timestamp`: UTC ingestion time
+- `snapshot_date`: logical pipeline date from Airflow `run_date`
+
+Then it writes raw API output to:
 
 `data_lake/raw/dt=YYYY-MM-DD/crypto.parquet`
 
@@ -102,6 +122,7 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
 - `volume`
 - `market_cap`
 - `timestamp`
+- `snapshot_date`
 
 The transformed dataset is written to:
 
@@ -118,22 +139,35 @@ Loading behavior:
 
 - Dimension rows are upserted with `ON CONFLICT DO UPDATE`
 - Fact rows are deduplicated by `(coin_id, timestamp)`
+- `snapshot_date` is stored in the fact table for partition-aware checks and analytics
 - Repeat runs for the same snapshot do not create duplicate fact rows
 
-### 4. Build analytics
+### 4. Quality check
 
-`pipeline/build_analytics.py` builds two daily aggregate tables:
+`pipeline/quality.py` validates only the current `run_date` partition after loading. The checks include:
+
+- fact row count for the current `snapshot_date`
+- null `coin_id`
+- null `timestamp`
+- duplicate `(coin_id, timestamp)` groups
+- orphan fact rows without matching `dim_coin`
+
+### 5. Build analytics
+
+`pipeline/build_analytics.py` incrementally rebuilds analytics only for the current `run_date` partition and writes two aggregate tables:
 
 - `daily_coin_metrics`
 - `daily_market_summary`
 
 These tables support simple reporting and SQL-based analysis on top of the warehouse.
 
-### 5. Orchestration
+### 6. Orchestration
 
-`dags/crypto_pipeline_dag.py` defines a daily Airflow DAG:
+`dags/crypto_platform_daily_dag.py` defines a daily Airflow DAG:
 
-`extract -> transform -> load -> build_analytics`
+`extract -> transform_batch -> load_warehouse -> quality_check -> build_analytics -> dbt_run -> dbt_test -> refresh_superset_dataset`
+
+The current `dbt` and `Superset` tasks are placeholders in the DAG, which makes the orchestration layer ready for the next project phase.
 
 ## Data model
 
@@ -150,6 +184,7 @@ These tables support simple reporting and SQL-based analysis on top of the wareh
 - Grain: one row per coin per ingestion timestamp
 - Primary key: `(coin_id, timestamp)`
 - Foreign key: `coin_id -> dim_coin.coin_id`
+- Partition key for pipeline logic: `snapshot_date`
 - Measures: `price`, `volume`, `market_cap`
 
 ### Analytics tables
@@ -169,13 +204,16 @@ These tables support simple reporting and SQL-based analysis on top of the wareh
 ```text
 .
 |-- dags/
-|   `-- crypto_pipeline_dag.py
+|   |-- crypto_pipeline_dag.py
+|   |-- crypto_platform_daily_dag.py
+|   `-- new_pipeline_dag.py
 |-- docker/
 |   `-- docker-compose.yml
 |-- pipeline/
 |   |-- extract.py
 |   |-- transform.py
 |   |-- load.py
+|   |-- quality.py
 |   `-- build_analytics.py
 |-- sql/
 |   `-- analytics.sql
@@ -215,7 +253,7 @@ This starts:
 
 ### 4. Trigger the DAG
 
-Run the `crypto_pipeline` DAG from the Airflow UI.
+Run the `crypto_platform_daily` DAG from the Airflow UI.
 
 If you run the Python scripts directly from your host machine instead of Airflow, set `DATABASE_URL` to the host-mapped Postgres port:
 
@@ -235,29 +273,17 @@ postgresql://postgres:1234@localhost:5433/crypto_db
 - Clear batch ETL separation between extract, transform, load, and analytics steps
 - Data lake layout with date-partitioned raw and processed zones
 - Warehouse model with dimension and fact tables
-- Airflow orchestration for repeatable scheduled runs
+- Airflow orchestration with parameterized `run_date` execution
+- Partition-level warehouse quality checks
 - Idempotent load pattern for the fact table
+- Incremental analytics rebuild by `snapshot_date`
 
 ## Current limitations and next improvements
 
-This project is a strong Fresher Data Engineer portfolio base, but the next upgrades to make it look more production-oriented are:
-
-- Add data quality checks for nulls, duplicates, schema drift, and freshness
-- Add logging, task-level monitoring, and failure alerting
+- Replace placeholder `dbt_run` and `dbt_test` tasks with a real dbt project
+- Add failure alerting and richer operational monitoring
+- Extend quality checks with freshness, schema drift, and business-rule validation
 - Document refresh cadence, SLA expectations, and data dictionary fields more deeply
-- Introduce incremental analytics builds instead of dropping and rebuilding aggregate tables
 - Add cloud storage and warehouse services such as S3/GCS plus BigQuery/Redshift-style deployment
-- Add dbt models and tests for a more analytics-engineering workflow
+- Add Superset datasets and dashboards on top of the analytics tables
 - Extend the model with SCD handling or richer dimension attributes
-
-## Why this project is relevant for Data Engineering roles
-
-This repository is positioned as a DE portfolio project rather than a generic backend app. It shows the ability to:
-
-- ingest data from an external API
-- persist raw and curated datasets
-- model warehouse tables with clear grain and keys
-- orchestrate repeatable jobs
-- produce analytics-ready tables for downstream consumers
-
-That combination aligns well with Fresher or early Junior Data Engineer expectations, especially when paired with strong SQL and a clear explanation of warehouse design decisions.
