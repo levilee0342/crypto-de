@@ -1,23 +1,20 @@
 from pathlib import Path
 import pandas as pd
 
-def transform():
-    raw_base = Path("data_lake/raw")
-    raw_files = sorted(raw_base.glob("dt=*/crypto.parquet"))
-    if not raw_files:
-        raise FileNotFoundError("No raw file found")
+def transform(run_date: str):
+    raw_file = Path(f"data_lake/raw/dt={run_date}/crypto.parquet")
+    if not raw_file.exists():
+        raise FileNotFoundError(f"Raw file not found for run_date={run_date}")
 
-    last_raw = raw_files[-1]
-    run_date = last_raw.parent.name.split("=", 1)[1]
-
-    df = pd.read_parquet(last_raw)
+    df = pd.read_parquet(raw_file)
     df = df[[
         "id",
         "symbol",
         "current_price",
         "market_cap",
         "total_volume",
-        "timestamp"
+        "timestamp",
+        "snapshot_date",
     ]].copy()
 
     df = df.rename(columns={
@@ -32,4 +29,4 @@ def transform():
     df.to_parquet(processed_dir / "crypto_clean.parquet", index=False)
 
 if __name__ == "__main__":
-    transform()
+    transform("2026-03-17")

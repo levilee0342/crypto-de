@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS fact_price (
     volume DOUBLE PRECISION,
     market_cap DOUBLE PRECISION,
     timestamp TIMESTAMP NOT NULL,
+    snapshot_date DATE NOT NULL,
     PRIMARY KEY (coin_id, timestamp),
     CONSTRAINT fk_fact_price_coin
         FOREIGN KEY (coin_id) REFERENCES dim_coin (coin_id)
