@@ -1,0 +1,51 @@
+version: 2
+
+sources:
+  - name: crypto
+    database: crypto_db
+    schema: public
+    tables:
+      - name: fact_price
+      - name: dim_coin
+
+models:
+  - name: stg_fact_price
+    description: "Standardized staging model for cryptocurrency price facts loaded from the warehouse fact_price table."
+    columns:
+      - name: coin_id
+        description: "Unique identifier from CoinGecko."
+        tests:
+          - not_null
+
+      - name: price
+        description: "Observed coin price in USD."
+
+      - name: volume
+        description: "Observed trading volume."
+
+      - name: market_cap
+        description: "Observed market capitalization."
+
+      - name: timestamp
+        description: "Ingestion timestamp in UTC."
+        tests:
+          - not_null
+
+      - name: snapshot_date
+        description: "Logical pipeline date passed from Airflow run_date."
+        tests:
+          - not_null
+
+  - name: stg_dim_coin
+    description: "Standardized staging model for cryptocurrency dimension data."
+    columns:
+      - name: coin_id
+        description: "Unique coin identifier from CoinGecko."
+        tests:
+          - not_null
+          - unique
+
+      - name: symbol
+        description: "Ticker symbol of the cryptocurrency."
+        tests:
+          - not_null
