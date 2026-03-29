@@ -8,6 +8,7 @@ from pipeline.quality import quality_check
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
+from pipeline.analytics_quality import analytics_quality_check
 
 
 default_args = {
@@ -16,6 +17,16 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
     'execution_timeout': timedelta(minutes=30),
 }
+
+def notify_failure(context):
+    task_instance = context["task_instance"]
+    dag_id = task_instance.dag_id
+    task_id = task_instance.task_id
+    run_id = context["run_id"]
+
+    print(
+        f"[ALERT] DAG failure detected: dag_id={dag_id}, task_id={task_id}, run_id={run_id}"
+    )
 
 with DAG(
     dag_id="crypto_platform_daily",
@@ -26,6 +37,7 @@ with DAG(
     default_args=default_args,
     max_active_runs=1,
     tags=["crypto", "data-engineering", "airflow", "dbt"],
+    on_failure_callback=notify_failure,
 ) as dag:
     
     start = EmptyOperator(task_id="start")
@@ -65,6 +77,12 @@ with DAG(
         bash_command="cd /opt/airflow/dbt && dbt test --target docker --profiles-dir /opt/airflow/dbt",
     )
 
+    analytics_quality_check_task = PythonOperator(
+        task_id="analytics_quality_check",
+        python_callable=analytics_quality_check,
+        op_kwargs={"run_date": "{{ ds }}"},
+    )
+
     refresh_superset_dataset = EmptyOperator(task_id="refresh_superset_dataset")
 
     end = EmptyOperator(task_id="end")
@@ -77,6 +95,7 @@ with DAG(
         >> quality_check_task
         >> dbt_run
         >> dbt_test
+        >> analytics_quality_check_task
         >> refresh_superset_dataset
         >> end
     )
