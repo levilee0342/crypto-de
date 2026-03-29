@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: mart_daily_coin_metrics
+    description: "Daily aggregated metrics for each cryptocurrency."
+    columns:
+      - name: coin_id
+        description: "Unique coin identifier."
+        tests:
+          - not_null
+
+      - name: snapshot_date
+        description: "Logical pipeline date for the daily aggregation."
+        tests:
+          - not_null
+
+      - name: avg_price
+        description: "Average daily price for the coin."
+
+      - name: max_price
+        description: "Maximum daily price for the coin."
+
+      - name: min_price
+        description: "Minimum daily price for the coin."
+
+      - name: avg_volume
+        description: "Average daily trading volume for the coin."
+
+      - name: avg_market_cap
+        description: "Average daily market capitalization for the coin."
+
+      - name: observations
+        description: "Number of fact rows contributing to the aggregation."
+
+  - name: mart_daily_market_summary
+    description: "Daily market-wide summary across all tracked cryptocurrencies."
+    columns:
+      - name: snapshot_date
+        description: "Logical pipeline date for the aggregation."
+        tests:
+          - not_null
+          - unique
+
+      - name: total_coins
+        description: "Number of distinct coins observed on the day."
+
+      - name: avg_price_all_coins
+        description: "Average price across all tracked coins on the day."
+
+      - name: total_volume
+        description: "Total trading volume across all tracked coins on the day."
+
+      - name: total_market_cap
+        description: "Total market capitalization across all tracked coins on the day."

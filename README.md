@@ -1,6 +1,6 @@
 # Crypto Data Engineering Pipeline
 
-An end-to-end batch data engineering project that ingests cryptocurrency market data from the CoinGecko API, stores raw and processed datasets in Parquet, loads a Postgres warehouse, runs partition-level quality checks, and builds daily analytics tables with Apache Airflow orchestration.
+An end-to-end batch data engineering project that ingests cryptocurrency market data from the CoinGecko API, stores raw and processed datasets in Parquet, loads a Postgres warehouse, runs partition-level quality checks, and builds dbt-based analytics marts with Apache Airflow orchestration.
 
 ## What this project demonstrates
 
@@ -11,8 +11,10 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
 - Partition-aware pipeline runs with `run_date`
 - Snapshot-based warehousing with `snapshot_date`
 - Post-load warehouse quality checks
+- dbt staging and mart modeling
+- dbt tests executed from Airflow
 - Idempotent fact loading with conflict handling
-- Incremental daily aggregate analytics for downstream reporting
+- Analytics-ready marts for downstream reporting
 - Local development with Docker Compose
 
 ## Architecture
@@ -68,19 +70,22 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
           | - orphan FK check                |
           +----------------+-----------------+
                            |
-                           | Build analytics
+                           | dbt run / dbt test
                            v
           +----------------------------------+
-          | Analytics Layer                  |
+          | dbt Analytics Layer              |
           |                                  |
-          | daily_coin_metrics               |
+          | stg_fact_price                   |
+          | stg_dim_coin                     |
+          |                                  |
+          | mart_daily_coin_metrics          |
           | - coin_id                        |
           | - snapshot_date                  |
           | - avg_price / max / min          |
           | - avg_volume                     |
           | - avg_market_cap                 |
           |                                  |
-          | daily_market_summary             |
+          | mart_daily_market_summary        |
           | - snapshot_date                  |
           | - total_coins                    |
           | - avg_price_all_coins            |
@@ -152,22 +157,26 @@ Loading behavior:
 - duplicate `(coin_id, timestamp)` groups
 - orphan fact rows without matching `dim_coin`
 
-### 5. Build analytics
+### 5. dbt modeling
 
-`pipeline/build_analytics.py` incrementally rebuilds analytics only for the current `run_date` partition and writes two aggregate tables:
+dbt builds the analytics layer on top of the warehouse with:
 
-- `daily_coin_metrics`
-- `daily_market_summary`
+- staging models
+  - `stg_fact_price`
+  - `stg_dim_coin`
+- mart models
+  - `mart_daily_coin_metrics`
+  - `mart_daily_market_summary`
 
-These tables support simple reporting and SQL-based analysis on top of the warehouse.
+`dbt run` materializes the models and `dbt test` validates the core assumptions on sources and models.
 
 ### 6. Orchestration
 
 `dags/crypto_platform_daily_dag.py` defines a daily Airflow DAG:
 
-`extract -> transform_batch -> load_warehouse -> quality_check -> build_analytics -> dbt_run -> dbt_test -> refresh_superset_dataset`
+`start -> extract -> transform_batch -> load_warehouse -> quality_check -> dbt_run -> dbt_test -> refresh_superset_dataset -> end`
 
-The current `dbt` and `Superset` tasks are placeholders in the DAG, which makes the orchestration layer ready for the next project phase.
+`refresh_superset_dataset` is still a placeholder task, while `dbt_run` and `dbt_test` are active Bash tasks executed from Airflow.
 
 ## Data model
 
@@ -187,14 +196,14 @@ The current `dbt` and `Superset` tasks are placeholders in the DAG, which makes 
 - Partition key for pipeline logic: `snapshot_date`
 - Measures: `price`, `volume`, `market_cap`
 
-### Analytics tables
+### dbt analytics models
 
-`daily_coin_metrics`
+`mart_daily_coin_metrics`
 
 - Grain: one row per coin per day
 - Metrics: average, max, min price; average volume; average market cap; number of observations
 
-`daily_market_summary`
+`mart_daily_market_summary`
 
 - Grain: one row per day
 - Metrics: total tracked coins, average price across all coins, total volume, total market cap
@@ -215,6 +224,12 @@ The current `dbt` and `Superset` tasks are placeholders in the DAG, which makes 
 |   |-- load.py
 |   |-- quality.py
 |   `-- build_analytics.py
+|-- dbt/
+|   |-- dbt_project.yml
+|   |-- profiles.yml
+|   `-- models/
+|       |-- staging/
+|       `-- marts/
 |-- sql/
 |   `-- analytics.sql
 |-- warehouse/
@@ -275,15 +290,17 @@ postgresql://postgres:1234@localhost:5433/crypto_db
 - Warehouse model with dimension and fact tables
 - Airflow orchestration with parameterized `run_date` execution
 - Partition-level warehouse quality checks
+- dbt-based staging and mart layers
+- dbt run and dbt test integrated into the Airflow DAG
 - Idempotent load pattern for the fact table
-- Incremental analytics rebuild by `snapshot_date`
+- Analytics parity verified between legacy Python outputs and dbt marts
 
 ## Current limitations and next improvements
 
-- Replace placeholder `dbt_run` and `dbt_test` tasks with a real dbt project
 - Add failure alerting and richer operational monitoring
 - Extend quality checks with freshness, schema drift, and business-rule validation
 - Document refresh cadence, SLA expectations, and data dictionary fields more deeply
 - Add cloud storage and warehouse services such as S3/GCS plus BigQuery/Redshift-style deployment
 - Add Superset datasets and dashboards on top of the analytics tables
+- Retire the legacy Python analytics step completely after keeping it as a temporary reference
 - Extend the model with SCD handling or richer dimension attributes

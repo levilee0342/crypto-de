@@ -36,7 +36,9 @@ services:
     restart: "no"
 
   airflow-init:
-    image: apache/airflow:2.9.3
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.airflow
     container_name: airflow_init
     hostname: airflow-init
     restart: "no"
@@ -58,6 +60,7 @@ services:
       - ../pipeline:/opt/airflow/pipeline
       - ../data_lake:/opt/airflow/data_lake
       - ../warehouse:/opt/airflow/warehouse
+      - ../dbt:/opt/airflow/dbt
       - ../logs:/opt/airflow/logs
     command: >
       bash -c "
@@ -72,7 +75,9 @@ services:
       "
 
   airflow-webserver:
-    image: apache/airflow:2.9.3
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.airflow
     container_name: airflow_webserver
     hostname: airflow-webserver
     restart: unless-stopped
@@ -99,11 +104,14 @@ services:
       - ../pipeline:/opt/airflow/pipeline
       - ../data_lake:/opt/airflow/data_lake
       - ../warehouse:/opt/airflow/warehouse
+      - ../dbt:/opt/airflow/dbt
       - ../logs:/opt/airflow/logs
     command: webserver
 
   airflow-scheduler:
-    image: apache/airflow:2.9.3
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.airflow
     container_name: airflow_scheduler
     hostname: airflow-scheduler
     restart: unless-stopped
@@ -127,6 +135,7 @@ services:
       - ../pipeline:/opt/airflow/pipeline
       - ../data_lake:/opt/airflow/data_lake
       - ../warehouse:/opt/airflow/warehouse
+      - ../dbt:/opt/airflow/dbt
       - ../logs:/opt/airflow/logs
     command: scheduler
 

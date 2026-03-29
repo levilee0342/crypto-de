@@ -1,0 +1,22 @@
+crypto_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5433
+      user: postgres
+      password: "1234"
+      dbname: crypto_db
+      schema: public
+      threads: 4
+
+    docker:
+      type: postgres
+      host: postgres
+      port: 5432
+      user: postgres
+      password: "1234"
+      dbname: crypto_db
+      schema: public
+      threads: 4
