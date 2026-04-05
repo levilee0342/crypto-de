@@ -47,6 +47,41 @@ def quality_check(run_date: str):
             """), {"run_date": run_date}
         ).scalar()
 
+        freshness_count = conn.execute(
+            text("""
+                SELECT COUNT(*) 
+                FROM fact_price
+                WHERE snapshot_date = :run_date
+            """), {"run_date": run_date}
+        ).scalar()
+
+        negative_price_count = conn.execute(text("""
+            SELECT COUNT(*)
+            FROM fact_price
+            WHERE snapshot_date = :run_date
+            AND price < 0
+        """), {"run_date": run_date}).scalar()
+
+        negative_volume_count = conn.execute(text("""
+            SELECT COUNT(*)
+            FROM fact_price
+            WHERE snapshot_date = :run_date
+            AND volume < 0
+        """), {"run_date": run_date}).scalar()
+
+        negative_market_cap_count = conn.execute(text("""
+            SELECT COUNT(*)
+            FROM fact_price
+            WHERE snapshot_date = :run_date
+            AND market_cap < 0
+        """), {"run_date": run_date}).scalar()
+
+        distinct_coin_count = conn.execute(text("""
+            SELECT COUNT(DISTINCT coin_id)
+            FROM fact_price
+            WHERE snapshot_date = :run_date
+        """), {"run_date": run_date}).scalar()
+
         logger.info("run_date=%s fact_count=%s", run_date, fact_count)
         logger.info("run_date=%s null_coin_id_count=%s", run_date, null_coin_id_count)
         logger.info("run_date=%s null_timestamp_count=%s", run_date, null_timestamp_count)
@@ -75,5 +110,22 @@ def quality_check(run_date: str):
             raise ValueError(
                 f"Quality check failed: {orphan_fact_count} orphan fact rows for run_date={run_date}"
             )
+        
+        if freshness_count == 0:
+            raise ValueError(f"Freshness check failed: no data found for run_date={run_date}")
 
+        if negative_price_count > 0:
+            raise ValueError(f"Range check failed: {negative_price_count} negative price rows for run_date={run_date}")
+
+        if negative_volume_count > 0:
+            raise ValueError(f"Range check failed: {negative_volume_count} negative volume rows for run_date={run_date}")
+
+        if negative_market_cap_count > 0:
+            raise ValueError(f"Range check failed: {negative_market_cap_count} negative market_cap rows for run_date={run_date}")
+
+        if distinct_coin_count < 10:
+            raise ValueError(
+                f"Minimum coin count check failed: only {distinct_coin_count} coins found for run_date={run_date}"
+            )
+        
     logger.info("Quality checks passed for run_date=%s", run_date)

@@ -1,6 +1,6 @@
 # Crypto Data Engineering Pipeline
 
-An end-to-end batch data engineering project that ingests cryptocurrency market data from the CoinGecko API, stores raw and processed datasets in Parquet, loads a Postgres warehouse, runs partition-level quality checks, and builds dbt-based analytics marts with Apache Airflow orchestration.
+An end-to-end batch data engineering project that ingests cryptocurrency market data from the CoinGecko API, stores raw and processed datasets in Parquet, loads a Postgres warehouse, runs partition-level quality checks, builds dbt-based analytics marts with Apache Airflow orchestration, and extends the analytics stack with a ClickHouse warehouse foundation.
 
 ## What this project demonstrates
 
@@ -15,6 +15,7 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
 - dbt tests executed from Airflow
 - Idempotent fact loading with conflict handling
 - Analytics-ready marts for downstream reporting
+- ClickHouse fact and aggregate table foundation for OLAP-style analytics
 - Local development with Docker Compose
 
 ## Architecture
@@ -92,6 +93,21 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
           | - total_volume                   |
           | - total_market_cap               |
           +----------------------------------+
+
+
+             +------------------------------+
+             | ClickHouse Analytics Path    |
+             +--------------+---------------+
+                            |
+                            | Manual extension
+                            v
+          +----------------------------------+
+          | ClickHouse Warehouse             |
+          |                                  |
+          | crypto.fact_price                |
+          | crypto.agg_coin_daily            |
+          | crypto.agg_market_daily          |
+          +----------------------------------+
 ```
 
 ## Tech stack
@@ -100,6 +116,7 @@ An end-to-end batch data engineering project that ingests cryptocurrency market 
 - Pandas
 - Apache Airflow
 - PostgreSQL
+- ClickHouse
 - SQLAlchemy
 - Docker Compose
 - Parquet data lake layout
@@ -178,6 +195,22 @@ dbt builds the analytics layer on top of the warehouse with:
 
 `refresh_superset_dataset` is still a placeholder task, while `dbt_run` and `dbt_test` are active Bash tasks executed from Airflow.
 
+### 7. ClickHouse extension
+
+The repository also includes a ClickHouse analytics warehouse foundation that currently runs as a manual extension path:
+
+- `pipeline/load_clickhouse.py`
+- `pipeline/clickhouse_quality.py`
+- `pipeline/build_clickhouse_analytics.py`
+
+This path loads curated crypto data into:
+
+- `crypto.fact_price`
+- `crypto.agg_coin_daily`
+- `crypto.agg_market_daily`
+
+The ClickHouse flow has been manually validated end-to-end and is intended as the next step toward an OLAP-focused analytics platform.
+
 ## Data model
 
 ### Warehouse tables
@@ -208,6 +241,24 @@ dbt builds the analytics layer on top of the warehouse with:
 - Grain: one row per day
 - Metrics: total tracked coins, average price across all coins, total volume, total market cap
 
+### ClickHouse analytics tables
+
+`crypto.fact_price`
+
+- Grain: one row per coin per snapshot timestamp
+- Partitioning: `toYYYYMM(snapshot_date)`
+- Sorting key: `(snapshot_date, coin_id, timestamp)`
+
+`crypto.agg_coin_daily`
+
+- Grain: one row per coin per day
+- Metrics: average, max, min price; average volume; average market cap; observations
+
+`crypto.agg_market_daily`
+
+- Grain: one row per day
+- Metrics: total coins, average price across all coins, total volume, total market cap
+
 ## Repository structure
 
 ```text
@@ -223,6 +274,9 @@ dbt builds the analytics layer on top of the warehouse with:
 |   |-- transform.py
 |   |-- load.py
 |   |-- quality.py
+|   |-- load_clickhouse.py
+|   |-- clickhouse_quality.py
+|   |-- build_clickhouse_analytics.py
 |   `-- build_analytics.py
 |-- dbt/
 |   |-- dbt_project.yml
@@ -231,7 +285,8 @@ dbt builds the analytics layer on top of the warehouse with:
 |       |-- staging/
 |       `-- marts/
 |-- sql/
-|   `-- analytics.sql
+|   |-- analytics.sql
+|   `-- clickhouse_schema.sql
 |-- warehouse/
 |   `-- schema.sql
 `-- data_lake/
@@ -256,6 +311,7 @@ docker compose -f docker/docker-compose.yml up -d
 This starts:
 
 - Postgres
+- ClickHouse
 - Airflow init job
 - Airflow webserver
 - Airflow scheduler
@@ -294,6 +350,7 @@ postgresql://postgres:1234@localhost:5433/crypto_db
 - dbt run and dbt test integrated into the Airflow DAG
 - Idempotent load pattern for the fact table
 - Analytics parity verified between legacy Python outputs and dbt marts
+- ClickHouse analytics warehouse foundation with validated fact and aggregate loads
 
 ## Current limitations and next improvements
 
@@ -301,6 +358,7 @@ postgresql://postgres:1234@localhost:5433/crypto_db
 - Extend quality checks with freshness, schema drift, and business-rule validation
 - Document refresh cadence, SLA expectations, and data dictionary fields more deeply
 - Add cloud storage and warehouse services such as S3/GCS plus BigQuery/Redshift-style deployment
+- Integrate the ClickHouse path into orchestration more formally instead of keeping it manual-only
 - Add Superset datasets and dashboards on top of the analytics tables
 - Retire the legacy Python analytics step completely after keeping it as a temporary reference
 - Extend the model with SCD handling or richer dimension attributes

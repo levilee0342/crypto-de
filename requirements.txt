@@ -5,3 +5,4 @@ requests==2.32.3
 SQLAlchemy==1.4.54
 psycopg2-binary==2.9.10
 python-dotenv==1.0.1
+clickhouse-connect==0.7.8

@@ -139,5 +139,26 @@ services:
       - ../logs:/opt/airflow/logs
     command: scheduler
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: crypto_clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DB: crypto
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ../sql/clickhouse_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
+  clickhouse_data:
